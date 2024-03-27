@@ -33,3 +33,6 @@
 
 /cmake-build-debug
 /build
+
+/3rdparty/tclap/*
+!/3rdparty/tclap/README
