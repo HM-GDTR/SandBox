@@ -1,2 +1,2 @@
 # SandBox
-A code sandbox for Online Judge.
+A code SandBox for Online Judge.

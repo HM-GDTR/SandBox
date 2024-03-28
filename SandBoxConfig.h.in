@@ -1,0 +1,4 @@
+// the configured options and settings for Tutorial
+#define SandBox_VERSION "@SandBox_VERSION@"
+#define SandBox_VERSION_MAJOR @SandBox_VERSION_MAJOR@
+#define SandBox_VERSION_MINOR @SandBox_VERSION_MINOR@
