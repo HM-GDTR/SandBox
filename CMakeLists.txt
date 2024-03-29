@@ -17,6 +17,7 @@ target_include_directories(SandBox PUBLIC
         "${PROJECT_SOURCE_DIR}"
         "${PROJECT_SOURCE_DIR}/src/include"
         "${PROJECT_SOURCE_DIR}/3rdparty/tclap/include"
+        "${PROJECT_SOURCE_DIR}/3rdparty/nlohmann/include"
 )
 
 configure_file(SandBoxConfig.h.in SandBoxConfig.h)
