@@ -2,7 +2,6 @@
 #include <string>
 #include <iostream>
 
-#include <boost/asio.hpp>
 
 // 第三方库头文件
 #include "json.hpp"
@@ -10,6 +9,7 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "tclap/CmdLine.h"
+#include "boost/asio.hpp"
 
 #include "types.hpp"
 #include "SandBoxConfig.h"
@@ -22,7 +22,7 @@ void loggerInit() {
     auto file_logger = spdlog::basic_logger_mt("basic_logger", "latest.log");
 
     spdlog::set_default_logger(stderr_logger);
-    spdlog::get("stderr")->sinks().push_back(file_logger->sinks().front());
+    spdlog::get("sandbox")->sinks().push_back(file_logger->sinks().front());
 }
 
 void registerCmdLine(int argc, char *argv[]) {
