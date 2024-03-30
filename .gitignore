@@ -34,4 +34,5 @@
 /cmake-build-debug
 /build
 
-/3rdparty/**/*
+/3rdparty/nlohmann/
+/3rdparty/tclap/
