@@ -201,12 +201,11 @@ public:
 
     virtual void reset();
 
-private:
     /**
      * Prevent accidental copying
      */
-    MultiArg<T>(const MultiArg<T> &rhs);
-    MultiArg<T> &operator=(const MultiArg<T> &rhs);
+    MultiArg<T>(const MultiArg<T> &rhs) = delete;
+    MultiArg<T> &operator=(const MultiArg<T> &rhs) = delete;
 };
 
 template <class T>
