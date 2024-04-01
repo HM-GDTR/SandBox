@@ -22,6 +22,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: add boost support
+      run: apt-get install libboost-all-dev
+
     - name: update submodule
       run: git submodule update --init --recursive
 
