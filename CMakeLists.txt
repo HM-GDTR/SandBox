@@ -8,6 +8,7 @@ add_executable(SandBox
         src/main.cpp
         src/runner/Runner.cpp
         src/include/types.hpp
+        src/runner/Worker.cpp
         src/include/status.hpp
         src/restrict/restrict.cpp
 )

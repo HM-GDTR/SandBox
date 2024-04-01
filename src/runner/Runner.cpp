@@ -70,7 +70,7 @@ SandBoxStatus runProblem(ProcessInfo info, SysCallRestricts restricts) {
 
         // 正常情况
         if(ret == pid) {
-
+            continue;
         }
         // 非正常情况
         else {

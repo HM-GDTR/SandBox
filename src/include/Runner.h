@@ -14,4 +14,7 @@
 #include "types.hpp"
 #include "status.hpp"
 
+SandBoxStatus runProblem(ProcessInfo info, SysCallRestricts restricts);
+SandBoxStatus runSample(ProcessInfo info, SysCallRestricts restricts, size_t example_idx);
+
 #endif //SANDBOX_RUNNER_H

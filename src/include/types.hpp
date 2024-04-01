@@ -7,8 +7,17 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "status.hpp"
+
+struct GlobalStatus {
+    std::istream& input;
+    std::ostream& output;
+
+    GlobalStatus(std::istream &input, std::ostream &output) : input(input), output(output) {}
+};
+extern std::unique_ptr<GlobalStatus> lpGlobalStatus;
 
 /**
  * 对于系统调用的限制

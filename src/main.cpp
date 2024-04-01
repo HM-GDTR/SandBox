@@ -4,18 +4,17 @@
 
 
 // 第三方库头文件
-#include "json.hpp"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "tclap/CmdLine.h"
 #include "boost/asio.hpp"
 
+#include "Worker.h"
 #include "types.hpp"
 #include "SandBoxConfig.h"
 
-using json = nlohmann::json;
-using boost::asio::ip::tcp;
+std::unique_ptr<GlobalStatus> lpGlobalStatus;
 
 void loggerInit() {
     auto stderr_logger = spdlog::stderr_color_mt("sandbox");
@@ -29,26 +28,47 @@ void registerCmdLine(int argc, char *argv[]) {
     using namespace TCLAP;
 
     CmdLine parser("A code SandBox for Online Judge", ' ', SandBox_VERSION);
-    ValueArg<int> portName("p", "port", "Specify port of remote connects", false, 49999, "number");
-    ValueArg<std::string> hostName("H", "host", "Specify host of remote connects", false, "127.0.0.1", "dns name or ip address");
-    SwitchArg verbose("v", "verbose", "Enable showing the complex detail");
 
-    parser.add(portName);
-    parser.add(hostName);
-    parser.add(verbose);
+    SwitchArg verboseSwitch("", "verbose", "Enable showing the complex detail");
+    SwitchArg ioSwitch("", "io", "Enable io connects instead of network connect");
+    ValueArg<int> portArg("p", "port", "Specify port of remote connects", false, 49999, "number");
+    ValueArg<std::string> hostArg("n", "name", "Specify host of remote host", false, "127.0.0.1", "remote host");
+
+    parser.add(portArg);
+    parser.add(hostArg);
+    parser.add(ioSwitch);
+    parser.add(verboseSwitch);
 
     parser.parse(argc, argv);
 
-    if(verbose) {
+    if(verboseSwitch) {
         spdlog::set_level(spdlog::level::trace);
     } else {
         spdlog::set_level(spdlog::level::info);
+    }
+
+    if(ioSwitch) {
+        lpGlobalStatus = std::make_unique<GlobalStatus>(std::cin, std::cout);
+    }
+    else {
+        using boost::asio::ip::tcp;
+        using boost::asio::ip::address;
+
+        address addr = address::from_string(hostArg);
+        tcp::endpoint endpoint = tcp::endpoint(addr, portArg);
+
+        boost::asio::ip::tcp::iostream io(endpoint);
+
+        lpGlobalStatus = std::make_unique<GlobalStatus>(io, io);
     }
 }
 
 int main (int argc, char *argv[], char *envp[]) {
     loggerInit();
     registerCmdLine(argc, argv);
+
+    // 进入判题主循环
+    work();
 
     return 0;
 }
