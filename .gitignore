@@ -33,6 +33,3 @@
 
 /cmake-build-debug
 /build
-
-/3rdparty/nlohmann/
-/3rdparty/tclap/
