@@ -23,8 +23,9 @@ public:
     }
 
     std::string getThreadName(pid_t pid) {
-        std::scoped_lock<std::shared_lock<std::shared_mutex>> _(std::shared_lock<std::shared_mutex>(mutex_lock));
+        mutex_lock.lock_shared();
         if(pid_name_map.contains(pid)) return pid_name_map[pid];
+        mutex_lock.unlock_shared();
         return "Unnamed Thread@" + std::to_string(pid);
         //return "Unknown Thread";
     }

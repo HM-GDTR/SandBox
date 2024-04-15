@@ -8,20 +8,20 @@
 #include <exception>
 #include <source_location>
 
-#if __has_include("stacktrace")
-#include <stacktrace>
-using std::stacktrace;
-#define INIT_TRACE(trace) stacktrace trace = stacktrace::current()
-#define TRACE_TO_STR(trace) std::to_string(trace)
-
-#else
+//#if __has_include("stacktrace")
+//#include <stacktrace>
+//using std::stacktrace;
+//#define INIT_TRACE(trace) stacktrace trace = stacktrace::current()
+//#define TRACE_TO_STR(trace) std::to_string(trace)
+//
+//#else
 
 #include <boost/stacktrace.hpp>
 using boost::stacktrace::stacktrace;
 #define INIT_TRACE(trace) stacktrace trace = {}
 #define TRACE_TO_STR(trace) boost::stacktrace::to_string(trace)
 
-#endif
+//#endif
 
 #include "ThreadInfo.hpp"
 
