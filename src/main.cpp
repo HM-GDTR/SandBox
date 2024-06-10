@@ -1,20 +1,19 @@
 // 标准库头文件
+#include <regex>
 #include <string>
 #include <iostream>
-
 
 // 第三方库头文件
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "tclap/CmdLine.h"
-#include "boost/asio.hpp"
 
-#include "Worker.h"
-#include "types.hpp"
+#include "server.h"
 #include "SandBoxConfig.h"
 
-std::unique_ptr<GlobalStatus> lpGlobalStatus;
+int server_port;
+std::string host_addr;
 
 void loggerInit() {
     auto stderr_logger = spdlog::stderr_color_mt("sandbox");
@@ -30,45 +29,29 @@ void registerCmdLine(int argc, char *argv[]) {
     CmdLine parser("A code SandBox for Online Judge", ' ', SandBox_VERSION);
 
     SwitchArg verboseSwitch("", "verbose", "Enable showing the complex detail");
-    SwitchArg ioSwitch("", "io", "Enable io connects instead of network connect");
     ValueArg<int> portArg("p", "port", "Specify port of remote connects", false, 49999, "number");
-    ValueArg<std::string> hostArg("n", "name", "Specify host of remote host", false, "127.0.0.1", "remote host");
+    ValueArg<std::string> hostArg("n", "name", "Specify host of remote host", false, "0.0.0.0", "remote host");
 
     parser.add(portArg);
     parser.add(hostArg);
-    parser.add(ioSwitch);
     parser.add(verboseSwitch);
 
     parser.parse(argc, argv);
+
+    host_addr = hostArg.getValue();
+    server_port = portArg.getValue();
 
     if(verboseSwitch) {
         spdlog::set_level(spdlog::level::trace);
     } else {
         spdlog::set_level(spdlog::level::info);
     }
-
-    if(ioSwitch) {
-        lpGlobalStatus = std::make_unique<GlobalStatus>(std::cin, std::cout);
-    }
-    else {
-        using boost::asio::ip::tcp;
-        using boost::asio::ip::address;
-
-        address addr = address::from_string(hostArg);
-        tcp::endpoint endpoint = tcp::endpoint(addr, portArg);
-
-        boost::asio::ip::tcp::iostream io(endpoint);
-
-        lpGlobalStatus = std::make_unique<GlobalStatus>(io, io);
-    }
 }
 
 int main (int argc, char *argv[], char *envp[]) {
     loggerInit();
-    registerCmdLine(argc, argv);
 
-    // 进入判题主循环
-    work();
+    SandBox::main_server.run();
 
     return 0;
 }

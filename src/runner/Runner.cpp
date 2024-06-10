@@ -1,81 +1,224 @@
 //
-// Created by ubuntu on 24-3-28.
+// Created by rainbowx on 24-6-9.
 //
 
-#include "src/include/Runner.h"
+#include "Runner.h"
 
-/**
- * 运行某一组测试样例
- * @param info 题目限制
- * @param example_idx 样例编号
- * @return 返回沙箱当前状态 (如果执行失败)
- */
-SandBoxStatus runSample(ProcessInfo info, SysCallRestricts restricts, size_t example_idx) {
-    // 装载新可执行文件需要的命令行参数
-    std::vector<const char*> args;
-    // 新可执行文件的路径
-    const char* exec_path = info._process_path.c_str();
-    // 输入输出文件的路径
-    std::string in_file_path(info._input_path[example_idx]), out_file_path(info._output_path[example_idx]);
+#include <ctime>
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <string>
+#include <exception>
 
-    // 将所需参数放入vector中
-    args.reserve(info._args.size());
-    for(const std::string& str : info._args) {
-        args.emplace_back(str.c_str());
-    }
-    args.push_back(nullptr);
+#include <sys/wait.h>
+#include <sys/ptrace.h>
+#include <sys/resource.h>
 
-    // 将指针取出以调用execv系统调用
-    char* const* arg_list = const_cast<char* const*>(args.data());
+#include "spdlog/spdlog.h"
+#include "boost/test/debug.hpp"
 
-    // TODO 添加资源限制
+#include "server.h"
+#include "Errors.hpp"
+#include "restrict.h"
+#include "SandBox.hpp"
 
-    // 输入输出重定向(如果需要的话) TODO 异常处理
-    if(not in_file_path.empty()) freopen(in_file_path.c_str(), "r", stdin);
-    if(not out_file_path.empty()) freopen(out_file_path.c_str(), "w", stdout);
+namespace SandBox {
 
-    // 尝试执行目标执行文件
-    int err = execv(exec_path, arg_list);
+    Runner::Runner(size_t max_task): max_task_(max_task), n_task_() { }
 
-    // TODO 记录失败日志
+    nlohmann::json Runner::run_single_task(const nlohmann::json& task_describe) {
+        time_t max_real_time_val = -1;
+        // exe_path arg was necessary
+        if(not task_describe.contains("exe_path") or not task_describe["exe_path"].is_string()) {
+            nlohmann::json result{};
 
-    return SandBoxStatus::ExecError;
-}
+            result["signal"] = 0;
+            result["error"] = OJStatus::INVALID_CONFIG;
+            result["result"] = RunStatus::InternalError;
+            result["exit_code"] = 0;
 
-/**
- * 运行某个问题的评测
- * @param info 问题信息与限制
- * @param restricts 系统调用限制
- * @return 返回沙箱当前状态
- */
-SandBoxStatus runProblem(ProcessInfo info, SysCallRestricts restricts) {
-    // 需要保证 输入文件个数与输出文件相同
-    assert(info._input_path.size() == info._output_path.size());
+            result["resource_usage"] = nlohmann::json{};
 
-    size_t samp_len = info._input_path.size();
-    for(size_t samp_idx = 0; samp_idx < samp_len; samp_idx++) {
+            return result;
+        }
+        if(task_describe.contains("max_real_time")) {
+            const auto& max_real_time = task_describe.at("max_real_time");
+            if(not max_real_time.is_number_unsigned()) {
+                ERROR_EXIT(OJStatus::INVALID_CONFIG);
+            }
+            max_real_time_val = max_real_time;
+        }
+
         pid_t pid = fork();
-        // 如果fork失败
-        if (pid < 0) return SandBoxStatus::ForkError;
+        // fail when fork
+        if(pid < 0) {
+            spdlog::error("Fail to call fork, reason: {}.", strerror(errno));
 
-        // 如果是子进程
-        if (pid == 0) {
-            return runSample(info, restricts, samp_idx);
+            nlohmann::json result{};
+            result["signal"] = 0;
+            result["error"] = OJStatus::FORK_FAILED;
+            result["result"] = RunStatus::NoError;
+            result["exit_code"] = 0;
+
+            return result;
+        }
+        spdlog::trace("Fork successfully.");
+
+        // ------------------------------------child process-----------------------------------
+        if(pid == 0) {
+            // setup child process
+            do_restricts(task_describe);
+
+            // run specified task
+            run_child(task_describe);
+            raise(SIGUSR1);
+
+            // error handling
+            exit(static_cast<int>(OJStatus::EXECVE_FAILED));
+        }
+        // ------------------------------------child process-----------------------------------
+
+        // -----------------------------------parent Process-----------------------------------
+        int status = 0;
+        bool is_timeout = false;
+        rusage resource_usage{};
+        time_t start_time{}, end_time{};
+        nlohmann::json result{}, resource{};
+
+        // return status
+        int signal = 0, exit_code = 0;
+        OJStatus oj_error = OJStatus::SUCCESS;
+        RunStatus run_result = RunStatus::NoError;
+
+        start_time = time(nullptr);
+
+        // set timer to kill timeout task.
+        if(max_real_time_val!= -1) {
+            std::thread{[&](int milliseconds) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+                is_timeout = kill(pid, SIGKILL) == 0;
+            }, std::min(max_real_time_val*2, max_real_time_val+1000)}.detach();
         }
 
-        // 如果是父进程
-        // 监控子进程代码
-        int ret_code = 0;
-        int ret = waitpid(pid, &ret_code, 0);
+        status = 0;
+        wait4(pid, &status, WSTOPPED, &resource_usage);
 
-        // 正常情况
-        if(ret == pid) {
-            continue;
-        }
-        // 非正常情况
-        else {
+        end_time = time(nullptr);
 
+        resource["real_time_cost"] = end_time - start_time;
+        resource["memory_cost"] = resource_usage.ru_maxrss * 1024;
+        resource["cpu_time_cost"] = static_cast<time_t>(resource_usage.ru_utime.tv_sec * 1000 + resource_usage.ru_utime.tv_usec / 1000);
+
+        // if not stopped, kill it
+        if(not (WIFEXITED(status) or WIFSIGNALED(status))) {
+            kill(pid, SIGKILL);
         }
+
+        // if killed by timer
+        if(is_timeout) {
+            signal = 0;
+            oj_error = OJStatus::SUCCESS;
+            run_result = RunStatus::TimeLimitExceedError;
+            exit_code = WEXITSTATUS(status);
+            goto report;
+        }
+        // if stopped by signal SIGSYS
+        if ((WIFSTOPPED(status) and WSTOPSIG(status) == SIGSYS) or (WIFSIGNALED(status) and WTERMSIG(status) == SIGSYS)) {
+            signal = WTERMSIG(status);
+            if(WIFSTOPPED(status)) {
+                siginfo_t siginfo;
+                signal = WSTOPSIG(status);
+                ptrace(PTRACE_GETSIGINFO, pid, nullptr, &siginfo);
+                spdlog::info("Child process received SIGSYS, syscall: {}, address: {}", siginfo.si_syscall, siginfo.si_call_addr);
+            }
+
+            oj_error = OJStatus::SUCCESS;
+            run_result = RunStatus::RestrictedError;
+            exit_code = WEXITSTATUS(status);
+            goto report;
+        }
+        // if exited normally
+        if(WIFEXITED(status) and WEXITSTATUS(status) == 0) {
+            signal = 0;
+            oj_error = OJStatus::SUCCESS;
+            run_result = RunStatus::NoError;
+            exit_code = WEXITSTATUS(status);
+            goto report;
+        }
+
+        signal = 0;
+        oj_error = OJStatus::SUCCESS;
+        run_result = RunStatus::RuntimeError;
+        exit_code = WEXITSTATUS(status);
+        goto report;
+
+
+    report:
+        // ensure child process is die
+        ensure(kill(pid, 0) != 0);
+
+        result["signal"] = signal;
+        result["error"] = oj_error;
+        result["result"] = run_result;
+        result["exit_code"] = exit_code;
+
+        result["resource_usage"] = resource;
+
+        return result;
+        // -----------------------------------parent Process-----------------------------------
     }
-    return SandBoxStatus::NoError;
-}
+
+    task_t Runner::add_task(nlohmann::json task_describe) {
+        {
+            std::scoped_lock<std::mutex> scoped_lock(mutex_);
+            if(n_task_ >= max_task_) return -1;
+            n_task_++;
+        }
+        auto result = run_single_task(task_describe);
+        return alive_answer.append(std::move(result));
+    }
+
+    int Runner::run_child(const nlohmann::json& config) {
+        std::vector<std::string> args_val, envp_val;
+        std::string exe_path = config["exe_path"];
+
+        if(config.contains("args")) {
+            const auto& args = config.at("args");
+            if(not args.is_array()) {
+                ERROR_EXIT(OJStatus::INVALID_CONFIG);
+            }
+
+            args_val = args;
+        }
+        if(config.contains("envp")) {
+            const auto& envp = config.at("envp");
+            if(not envp.is_array()) {
+                ERROR_EXIT(OJStatus::INVALID_CONFIG);
+            }
+
+            envp_val = envp;
+        }
+
+        size_t argc = args_val.size(), envc = envp_val.size();
+        std::vector<const char*> args_sys, envp_sys;
+
+        args_sys.reserve(argc+1);
+        envp_val.reserve(envc+1);
+
+        for(const auto& arg: args_val) args_sys.emplace_back(arg.c_str());
+        for(const auto& env: envp_val) envp_sys.emplace_back(env.c_str());
+
+        args_sys.emplace_back(nullptr);
+        envp_sys.emplace_back(nullptr);
+
+        execve(exe_path.c_str(), (char* const*)args_sys.data(), (char* const*)envp_sys.data());
+
+        return -1;
+    }
+
+    int Runner::stop_task(int task_id) {
+        throw std::logic_error("Function not yet implemented");
+    }
+
+} // SandBox
