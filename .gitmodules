@@ -8,3 +8,6 @@
 	path = 3rdparty/tclap
 	url = https://github.com/mirror/tclap.git
 	branch = 1.4
+[submodule "3rdparty/cpp-httplib"]
+	path = 3rdparty/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
