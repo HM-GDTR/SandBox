@@ -10,7 +10,7 @@
 #include "boost/test/debug.hpp"
 
 namespace SandBox {
-    constexpr void _debugbreak() {
+    inline void _debugbreak() {
         __asm__("int $3");
     }
 
