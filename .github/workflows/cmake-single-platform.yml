@@ -22,8 +22,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: add boost support
-      run: sudo apt-get install libboost-all-dev
+    - name: add components support
+      run: sudo apt-get install libboost-all-dev libseccomp-dev
 
     - name: update submodule
       run: git submodule update --init --recursive
